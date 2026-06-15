@@ -18,57 +18,7 @@ function jsonResponse(res, data, status = 200) {
   res.end(body);
 }
 
-const BYPASS_HTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><script>
-(function() {
-  var realXHR = window.XMLHttpRequest;
-  window.XMLHttpRequest = function() {
-    var xhr = new realXHR();
-    var origOpen = xhr.open;
-    xhr.open = function(method, url) {
-      var u = new URL(url, 'https://ghast.io');
-      if (u.pathname === '/api/auth/google') {
-        var _send = xhr.send;
-        xhr.send = function() {
-          Object.defineProperty(xhr, 'status', {get:function(){return 200}});
-          Object.defineProperty(xhr, 'responseText', {get:function(){return '{}'}});
-          Object.defineProperty(xhr, 'readyState', {get:function(){return 4}});
-          setTimeout(function() {
-            if (xhr.onreadystatechange) xhr.onreadystatechange();
-            if (xhr.onload) xhr.onload();
-          }, 50);
-        };
-      }
-      if (u.pathname === '/v8/login') {
-        var _send2 = xhr.send;
-        xhr.send = function() {
-          Object.defineProperty(xhr, 'status', {get:function(){return 200}});
-          Object.defineProperty(xhr, 'responseText', {get:function(){
-            return JSON.stringify({status:'ok',authenticated:true,token:'mock-token',user:{id:'mock',email:'mock@ghast.local',username:'MockUser',plan:'premium'}});
-          }});
-          Object.defineProperty(xhr, 'readyState', {get:function(){return 4}});
-          setTimeout(function() {
-            if (xhr.onreadystatechange) xhr.onreadystatechange();
-            if (xhr.onload) xhr.onload();
-          }, 50);
-        };
-      }
-      return origOpen.apply(xhr, arguments);
-    };
-    return xhr;
-  };
-})();
-</script></head><body><h1>Ghast Mock - Auth Bypass Ready</h1><p>Close this window and restart the app.</p></body></html>`;
-
-const LOGIN_SUCCESS_HTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
-<script>
-try {
-  window.opener && window.opener.postMessage({type:'GHOST_AUTH_SUCCESS',token:'mock-jwt-token',user:{id:'mock',email:'mock@ghast.local'}}, '*');
-} catch(e) {}
-window.close();
-</script>
-</head><body><h1>Login Successful</h1><p>You can close this window and go back to the app.</p></body></html>`;
+const BYPASS_HTML = `<!DOCTYPE html>`
 
 function matchRoute(method, urlPath) {
   if (urlPath === '/api/auth/me' && method === 'GET') return 'auth_me';
@@ -148,11 +98,10 @@ function handleRequest(req, res) {
 
     case 'google_auth_get': {
       const appPort = url.searchParams.get('appPort') || '8080';
-      const token = 'mock-jwt-full-auth-token';
-      const redirectUrl = `http://localhost:${appPort}/auth/callback?token=${encodeURIComponent(token)}`;
+      const redirectUrl = `http://localhost:${appPort}/auth/callback?token=mock-jwt-full-auth`;
       console.log(`  → Redirecting to ${redirectUrl}`);
-      res.writeHead(302, { Location: redirectUrl, 'Content-Type': 'text/html' });
-      return res.end('<html><body>Redirecting...<script>location.href="' + redirectUrl + '"</script></body></html>');
+      res.writeHead(302, { Location: redirectUrl });
+      return res.end(`<html><body>Logging in...<script>location.replace("${redirectUrl}")</script></body></html>`);
     }
 
     case 'google_auth_post': {
@@ -169,8 +118,12 @@ function handleRequest(req, res) {
       return res.end('<html><body><h1>Ghast</h1><p>No upgrade available.</p></body></html>');
 
     case 'login_ok':
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      return res.end(LOGIN_SUCCESS_HTML);
+      return jsonResponse(res, {
+        status: 'ok',
+        authenticated: true,
+        token: 'mock-jwt-full-auth-token',
+        user: { id: 'mock-12345', email: 'mock@ghast.local', username: 'MockUser', plan: 'premium', plan_expires: '2099-12-31T23:59:59Z' },
+      });
 
     case 'bypass':
       res.writeHead(200, { 'Content-Type': 'text/html' });
