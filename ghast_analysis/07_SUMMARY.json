@@ -1,0 +1,40 @@
+{
+  "sha256": "7f27d4a448c26ac8076ee8afd56705edddf39e7ec7063df860958bc56c6d58ac",
+  "installer": "Inno Setup 5.5.7",
+  "language_frameworks": [
+    "C++ (MSVC compiler, MFC framework) - Loader.exe, Ghast.exe, Common.dll",
+    "React 16 + Redux + React-Router (webpack bundle) - Frontend inside Common.dll",
+    "Tailwind CSS (custom theme) - Styling",
+    "CEF (Chromium Embedded Framework) - Browser engine (libcef.dll 96MB)",
+    "libsodium 1.x - Cryptography library"
+  ],
+  "installed_to": "%LOCALAPPDATA%\\Programs\\Ghast\\",
+  "domain": "ghast.io",
+  "api_endpoints": [
+    "/api/auth/me",
+    "/api/auth/google?platform=app&appPort=",
+    "/api/getConnectionSettings",
+    "/api/updates/check-for-update/",
+    "v8/login",
+    "ghast.io/upgrade",
+    "ghast.io/login-success"
+  ],
+  "detected_features": {
+    "authentication": "Google OAuth",
+    "cryptography": "libsodium (ChaCha20-Poly1305, Curve25519, AES-256-GCM, XChaCha20, Argon2)",
+    "browser_engine": "Chromium Embedded Framework (full Chrome embedded)",
+    "ui_framework": "React 16 + Redux + Tailwind",
+    "notifications": "System tray (Shell_NotifyIcon)",
+    "updates": "Auto-update mechanism",
+    "clipboard_access": "OpenClipboard/SetClipboardData/EmptyClipboard",
+    "process_management": "CreateProcessW/TerminateProcess/Process32First"
+  },
+  "red_flags": [],
+  "libraries": {
+    "libsodium": "libsodium v1.0.18 (ChaCha20, Poly1305, Curve25519, AES-GCM, Argon2)",
+    "zlib1": "ZLIB compression",
+    "CEF": "Chromium Embedded Framework (Chrome/Edge engine)",
+    "MFC": "Microsoft Foundation Classes",
+    "vcruntime140": "Visual C++ 2015/2017/2019 runtime"
+  }
+}

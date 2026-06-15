@@ -1,0 +1,31 @@
+=== Files installed to %LOCALAPPDATA%\Programs\Ghast\ ===
+
+  Common.dll                                    432,024 bytes
+  Ghast.exe                                   4,932,504 bytes
+  Loader.exe                                  5,020,056 bytes
+  cef.pak                                     2,132,988 bytes
+  cef_100_percent.pak                           654,028 bytes
+  cef_200_percent.pak                           808,283 bytes
+  cef_extensions.pak                          1,772,828 bytes
+  chrome_elf.dll                                820,736 bytes
+  d3dcompiler_47.dll                          4,346,120 bytes
+  icudtl.dat                                 10,505,952 bytes
+  libEGL.dll                                    309,760 bytes
+  libGLESv2.dll                               6,902,784 bytes
+  libcef.dll                                100,483,584 bytes
+  libsodium.dll                                 337,408 bytes
+  snapshot_blob.bin                             237,188 bytes
+  v8_context_snapshot.bin                       554,544 bytes
+  vcruntime140.dll                               76,152 bytes
+  zlib1.dll                                      74,752 bytes
+
+=== File type details ===
+tel 80386, for MS Windows, 8 sections
+/tmp/ghast_extracted/localappdata/Programs/Ghast/libGLESv2.dll:           PE32 executable (DLL) (console) Intel 80386, for MS Windows, 8 sections
+/tmp/ghast_extracted/localappdata/Programs/Ghast/libcef.dll:              PE32 executable (DLL) (console) Intel 80386, for MS Windows, 10 sections
+/tmp/ghast_extracted/localappdata/Programs/Ghast/libsodium.dll:           PE32 executable (DLL) (GUI) Intel 80386, for MS Windows, 5 sections
+/tmp/ghast_extracted/localappdata/Programs/Ghast/locales:                 directory
+/tmp/ghast_extracted/localappdata/Programs/Ghast/snapshot_blob.bin:       data
+/tmp/ghast_extracted/localappdata/Programs/Ghast/v8_context_snapshot.bin: data
+/tmp/ghast_extracted/localappdata/Programs/Ghast/vcruntime140.dll:        PE32 executable (DLL) (console) Intel 80386, for MS Windows, 5 sections
+/tmp/ghast_extracted/localappdata/Programs/Ghast/zlib1.dll:               PE32 executable (DLL) (GUI) Intel 80386, for MS Windows, 5 sections

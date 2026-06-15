@@ -1,0 +1,14 @@
+# Instalador original (46MB)
+Ghast_Setup_1.0.0.4.exe
+
+# Zip
+*.zip
+
+# Certificados SSL generados
+mock-server/certs/
+
+# Extracted original binaries (no los parcheados)
+ghast_extracted/
+/tmp/
+*.tmp
+.atl/
