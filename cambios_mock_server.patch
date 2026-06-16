@@ -1,0 +1,201 @@
+From d0513f97539d14a6491af84de713e750e36bc0f7 Mon Sep 17 00:00:00 2001
+From: numffy <franco76297124@gmail.com>
+Date: Mon, 15 Jun 2026 20:16:08 -0500
+Subject: [PATCH] docs: add analysis summary and fix mock server responses
+
+---
+ ghast_analysis/RESUMEN_ANALISIS.md   | 64 ++++++++++++++++++++++++
+ ghast_analysis/mock-server/server.js | 74 +++++++++++-----------------
+ 2 files changed, 94 insertions(+), 44 deletions(-)
+ create mode 100644 ghast_analysis/RESUMEN_ANALISIS.md
+
+diff --git a/ghast_analysis/RESUMEN_ANALISIS.md b/ghast_analysis/RESUMEN_ANALISIS.md
+new file mode 100644
+index 0000000..e76d4a8
+--- /dev/null
++++ b/ghast_analysis/RESUMEN_ANALISIS.md
+@@ -0,0 +1,64 @@
++# Resumen del Análisis de Ghast - Mock Server y Errores de Parseo
++
++Este documento recopila de forma cronológica todos los hallazgos técnicos, el estado inicial del código, las pruebas realizadas y los parches aplicados durante el análisis de la arquitectura de red y el cliente C++ de la aplicación Ghast.
++
++---
++
++## 1. Arquitectura General Descubierta
++* **Frontend (UI):** Desarrollado en React, empaquetado con Webpack. Los archivos Javascript están ofuscados e incrustados mediante CEF (Chromium Embedded Framework). La UI reside en `Common.dll` y los bloques `.js` extraídos.
++* **Backend Local (Cliente C++):** Los ejecutables `Ghast.exe` y `Loader.exe` están programados en C++ nativo para Windows.
++* **Librería de Red/JSON:** Utilizan **Microsoft `cpprestsdk`** (C++ REST SDK) para peticiones HTTP y parseo JSON (`web::json::value`). Esta librería es conocida por su tipado estricto: si se extrae un valor con tipo incorrecto (ej. `.as_integer()` sobre un string) o la llave no existe, lanza una excepción (`web::json::json_exception`), lo que la app captura y muestra genéricamente como `"Invalid response"`.
++
++---
++
++## 2. Historial de Pruebas, Problemas y Soluciones
++
++A continuación se detalla cómo estaba el mock server inicialmente, qué fallaba y qué arreglamos paso a paso extrayendo datos de la memoria (UTF-16) de los ejecutables.
++
++### Fase 1: El Bucle de Actualización (Update Check)
++* **Estado Original:** La aplicación (Loader) se quedaba en un bucle infinito haciendo peticiones a `/api/updates/check-for-update/1.0.0.4`. El mock server respondía con:
++  `"update": { "available": false, "current_version": "1.0.0.4", ... }`
++* **Problema:** El binario fallaba con el error `"Invalid response"`. Encontramos que en el ejecutable, las variables esperadas eran estrictamente `status`, `update`, `link`, `checksum`. 
++* **Lo que arreglamos:** Descubrimos que el C++ esperaba que el campo `update` fuera un **booleano** (`false`), no un objeto. Al aplanar la respuesta a `"update": false`, el error desapareció y permitió que la aplicación cargara la interfaz gráfica principal.
++
++### Fase 2: El Login con Google (`/api/auth/me`)
++* **Estado Original:** Al darle a "Log in with Google", el mock server (vía `/login-success` y `auth_me`) devolvía datos como:
++  `"user": { "id": "mock-12345", "plan": "premium", "plan_expires": "2099-12-31T23:59:59Z" }`
++* **Problema:** La interfaz lanzaba inmediatamente `"Invalid response"`.
++* **Lo que arreglamos:** Analizando las cadenas UTF-16 de `Ghast.exe`, nos dimos cuenta de que el sistema de Ghast NO usa un objeto `"user"`, ni conoce la palabra `"premium"`. El código C++ buscaba llaves planas en la raíz para validar la suscripción. Cambiamos la respuesta en `server.js` a:
++  ```json
++  {
++    "name": "MockGhastUser",
++    "email": "mock@ghast.local",
++    "pictureURL": "https://ghast.io/avatar.png",
++    "admin": false,
++    "lightning": true,
++    "basic": false
++  }
++  ```
++  **Resultado:** ¡Éxito! El error desapareció y se logró el inicio de sesión falso (mock) permitiendo acceder a los controles de la aplicación.
++
++### Fase 3: El Botón "Run" y el Método HTTP
++* **Estado Original:** Al presionar "Run" en la UI, el frontend recopilaba los ajustes (`latency`, `tuning`, `mtu`, etc.) y llamaba a una función nativa en C++. La terminal del mock server imprimía:
++  `POST /api/getConnectionSettings → 404`
++* **Problema:** La ruta en `server.js` estaba configurada para aceptar únicamente peticiones `GET`.
++* **Lo que arreglamos:** Modificamos el servidor para aceptar `POST` en esa ruta, logrando que Node.js empezara a responder con código HTTP `200 OK`.
++
++### Fase 4: Formato de Calidad de Servicio (QoS) y Registro
++* **Estado Original:** Para el endpoint `getConnectionSettings`, el mock server de pruebas devolvía un array falso de servidores VPN (`{ "servers": [ { "ip": "...", "latency_ms": 25 } ] }`).
++* **Problema:** La UI volvió a arrojar `"Invalid response, Error code:0"`.
++* **El Descubrimiento:** Ghast no es una VPN estándar, es un optimizador de red para juegos. A través del análisis del C++, revelamos que la respuesta esperada no son servidores, sino un arreglo llamado `"setting"` y un `"time"`.
++  Las políticas de QoS esperadas por la aplicación tienen las llaves: `appName`, `protocol`, `sourcePort`, `destinationPort`, `sourceIp`, `destinationIp`, `dcspValue`, `throttleRate`, `sourceIpPrefix`, `destinationIpPrefix`, `version`.
++  Y para modificación del registro de Windows: `action`, `path`, `regType`, `value`.
++* **Estado Final de la Prueba:** Editamos `server.js` para enviar este formato exacto, intentando evadir los errores con arrays vacíos (`"setting": []`). Sin embargo, el error 0 de parseo persiste, confirmando que el cliente exige tipos de variables numéricas muy estrictas (ej. enteros sin comillas para `throttleRate` o `regType`) y posiblemente una estructura que no se puede adivinar sin depurar (debugger) la excepción de `cpprestsdk` en tiempo de ejecución.
++
++---
++
++## 3. Detalle Técnico: El falso cuelgue de 5 segundos
++Durante las pruebas de la Fase 4, se notó un retraso de 3 a 4 segundos antes de poder volver a darle click al botón "Run", sugiriendo que la app estaba procesando la inyección de la red. 
++* **Resolución:** Investigando el archivo ofuscado del frontend (`02_JS_block_2_33664b.js` línea 400), se localizó la instrucción `setTimeout(function(){ r(!1); }, 5e3);`.
++* Esto demuestra que la interfaz bloquea (hace *debounce*) del botón por 5 segundos intencionalmente. El error nativo en C++ ocurre de forma inmediata en el instante que procesa el JSON.
++
++## 4. Conclusión Final
++Hemos documentado exitosamente la estructura general, sorteado el sistema de login y el validador de actualizaciones reconstruyendo las estructuras nativas de la aplicación. 
++El último muro es la deserialización del endpoint de QoS (`getConnectionSettings`). Para superarlo, se requiere conocer el tipo de dato primitivo exacto de C++ (string, bool, long, uint32) de las ~15 llaves que exige el payload de optimización de Windows, ya que `web::json::value` bloquea la ejecución de la función ante el más mínimo desajuste de tipos estructurales.
+\ No newline at end of file
+diff --git a/ghast_analysis/mock-server/server.js b/ghast_analysis/mock-server/server.js
+index de21efb..6f4d957 100644
+--- a/ghast_analysis/mock-server/server.js
++++ b/ghast_analysis/mock-server/server.js
+@@ -22,7 +22,7 @@ const BYPASS_HTML = `<!DOCTYPE html>`
+ 
+ function matchRoute(method, urlPath) {
+   if (urlPath === '/api/auth/me' && method === 'GET') return 'auth_me';
+-  if (urlPath === '/api/getConnectionSettings' && method === 'GET') return 'settings';
++  if (urlPath.startsWith('/api/getConnectionSettings') && (method === 'GET' || method === 'POST')) return 'settings';
+   if (urlPath.startsWith('/api/updates/check-for-update/') && method === 'GET') return 'update';
+   if (urlPath.startsWith('/api/auth/google') && method === 'GET') return 'google_auth_get';
+   if (urlPath === '/api/auth/google' && method === 'POST') return 'google_auth_post';
+@@ -50,50 +50,34 @@ function handleRequest(req, res) {
+   switch (route) {
+     case 'auth_me':
+       return jsonResponse(res, {
+-        status: 'ok',
+-        authenticated: true,
+-        user: {
+-          id: 'mock-user-12345',
+-          email: 'mock@ghast.local',
+-          username: 'MockGhastUser',
+-          plan: 'premium',
+-          plan_expires: '2099-12-31T23:59:59Z',
+-          created_at: '2024-01-01T00:00:00Z',
+-        },
++        name: 'MockGhastUser',
++        email: 'mock@ghast.local',
++        pictureURL: 'https://ghast.io/avatar.png',
++        admin: false,
++        lightning: true,
++        basic: false
+       });
+ 
+     case 'settings':
+-      return jsonResponse(res, {
+-        status: 'ok',
+-        authenticated: true,
+-        plan: 'premium',
+-        expires_at: '2099-12-31T23:59:59Z',
+-        settings: {
+-          dns_mode: 'system',
+-          kill_switch: false,
+-          auto_connect: false,
+-          latency_optimization: true,
+-          protocol: 'tcp',
+-          mtu: 1500,
+-        },
+-        servers: [
+-          { id: 'us-east-01', name: 'US East (New York)', host: 'ny1.mock.local', port: 443, latency_ms: 25, load: 12, region: 'us-east' },
+-          { id: 'us-west-01', name: 'US West (Los Angeles)', host: 'la1.mock.local', port: 443, latency_ms: 65, load: 34, region: 'us-west' },
+-          { id: 'eu-west-01', name: 'EU West (London)', host: 'lon1.mock.local', port: 443, latency_ms: 85, load: 18, region: 'eu-west' },
+-          { id: 'eu-cent-01', name: 'EU Central (Frankfurt)', host: 'fra1.mock.local', port: 443, latency_ms: 95, load: 22, region: 'eu-central' },
+-          { id: 'sa-east-01', name: 'SA East (Sao Paulo)', host: 'sao1.mock.local', port: 443, latency_ms: 150, load: 8, region: 'sa-east' },
+-          { id: 'ap-se-01', name: 'AP Southeast (Singapore)', host: 'sgp1.mock.local', port: 443, latency_ms: 200, load: 45, region: 'ap-southeast' },
+-        ],
+-        encryption: {
+-          algorithm: 'chacha20-poly1305',
+-          public_key: '3d7c5e9f2a1b8c4d6e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4',
+-        },
++      let postBody = '';
++      req.on('data', c => postBody += c);
++      return req.on('end', () => {
++        try {
++          if (postBody) console.log("      POST Data:", postBody);
++        } catch (e) {}
++        jsonResponse(res, {
++          "status": "ok",
++          "time": "1704067200000",
++          "setting": []
++        });
+       });
+ 
+     case 'update':
+       return jsonResponse(res, {
+-        status: 'ok',
+-        update: { available: false, current_version: '1.0.0.4', latest_version: '1.0.0.4', link: '', checksum: '', release_notes: '', mandatory: false },
++        "status": "ok",
++        "update": false,
++        "link": "",
++        "checksum": ""
+       });
+ 
+     case 'google_auth_get': {
+@@ -107,11 +91,11 @@ function handleRequest(req, res) {
+     case 'google_auth_post': {
+       let body = '';
+       req.on('data', c => body += c);
+-      return req.on('end', () => jsonResponse(res, { status: 'ok', authenticated: true, token: 'mock-jwt', user: { id: 'mock', email: 'mock@ghast.local', plan: 'premium' } }));
++      return req.on('end', () => jsonResponse(res, { name: 'mock', email: 'mock@ghast.local', pictureURL: '', admin: false, lightning: true, basic: false }));
+     }
+ 
+     case 'v8login':
+-      return jsonResponse(res, { status: 'ok', authenticated: true, token: 'mock-jwt', user: { id: 'mock', email: 'mock@ghast.local', plan: 'premium' } });
++      return jsonResponse(res, { name: 'mock', email: 'mock@ghast.local', pictureURL: '', admin: false, lightning: true, basic: false });
+ 
+     case 'upgrade':
+       res.writeHead(200, { 'Content-Type': 'text/html' });
+@@ -119,10 +103,12 @@ function handleRequest(req, res) {
+ 
+     case 'login_ok':
+       return jsonResponse(res, {
+-        status: 'ok',
+-        authenticated: true,
+-        token: 'mock-jwt-full-auth-token',
+-        user: { id: 'mock-12345', email: 'mock@ghast.local', username: 'MockUser', plan: 'premium', plan_expires: '2099-12-31T23:59:59Z' },
++        name: 'MockUser',
++        email: 'mock@ghast.local',
++        pictureURL: 'https://ghast.io/avatar.png',
++        admin: false,
++        lightning: true,
++        basic: false
+       });
+ 
+     case 'bypass':
+-- 
+2.54.0.windows.1
+

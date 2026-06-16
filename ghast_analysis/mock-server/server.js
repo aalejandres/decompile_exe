@@ -22,7 +22,7 @@ const BYPASS_HTML = `<!DOCTYPE html>`
 
 function matchRoute(method, urlPath) {
   if (urlPath === '/api/auth/me' && method === 'GET') return 'auth_me';
-  if (urlPath === '/api/getConnectionSettings' && method === 'GET') return 'settings';
+  if (urlPath.startsWith('/api/getConnectionSettings') && (method === 'GET' || method === 'POST')) return 'settings';
   if (urlPath.startsWith('/api/updates/check-for-update/') && method === 'GET') return 'update';
   if (urlPath.startsWith('/api/auth/google') && method === 'GET') return 'google_auth_get';
   if (urlPath === '/api/auth/google' && method === 'POST') return 'google_auth_post';
@@ -50,50 +50,55 @@ function handleRequest(req, res) {
   switch (route) {
     case 'auth_me':
       return jsonResponse(res, {
-        status: 'ok',
-        authenticated: true,
-        user: {
-          id: 'mock-user-12345',
-          email: 'mock@ghast.local',
-          username: 'MockGhastUser',
-          plan: 'premium',
-          plan_expires: '2099-12-31T23:59:59Z',
-          created_at: '2024-01-01T00:00:00Z',
-        },
+        name: 'MockGhastUser',
+        email: 'mock@ghast.local',
+        pictureURL: 'https://ghast.io/avatar.png',
+        admin: false,
+        lightning: true,
+        basic: false
       });
 
     case 'settings':
-      return jsonResponse(res, {
-        status: 'ok',
-        authenticated: true,
-        plan: 'premium',
-        expires_at: '2099-12-31T23:59:59Z',
-        settings: {
-          dns_mode: 'system',
-          kill_switch: false,
-          auto_connect: false,
-          latency_optimization: true,
-          protocol: 'tcp',
-          mtu: 1500,
-        },
-        servers: [
-          { id: 'us-east-01', name: 'US East (New York)', host: 'ny1.mock.local', port: 443, latency_ms: 25, load: 12, region: 'us-east' },
-          { id: 'us-west-01', name: 'US West (Los Angeles)', host: 'la1.mock.local', port: 443, latency_ms: 65, load: 34, region: 'us-west' },
-          { id: 'eu-west-01', name: 'EU West (London)', host: 'lon1.mock.local', port: 443, latency_ms: 85, load: 18, region: 'eu-west' },
-          { id: 'eu-cent-01', name: 'EU Central (Frankfurt)', host: 'fra1.mock.local', port: 443, latency_ms: 95, load: 22, region: 'eu-central' },
-          { id: 'sa-east-01', name: 'SA East (Sao Paulo)', host: 'sao1.mock.local', port: 443, latency_ms: 150, load: 8, region: 'sa-east' },
-          { id: 'ap-se-01', name: 'AP Southeast (Singapore)', host: 'sgp1.mock.local', port: 443, latency_ms: 200, load: 45, region: 'ap-southeast' },
-        ],
-        encryption: {
-          algorithm: 'chacha20-poly1305',
-          public_key: '3d7c5e9f2a1b8c4d6e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4',
-        },
+      let postBody = '';
+      req.on('data', c => postBody += c);
+      return req.on('end', () => {
+        try {
+          if (postBody) console.log("      POST Data:", postBody.slice(0,500));
+        } catch (e) {}
+        jsonResponse(res, {
+          "status": "ok",
+          "time": 1704067200000,
+          "setting": [
+            {
+              "action": "add",
+              "appName": "Minecraft",
+              "protocol": "TCP",
+              "sourcePort": 25565,
+              "destinationPort": 0,
+              "sourceIp": "0.0.0.0",
+              "destinationIp": "0.0.0.0",
+              "dcspValue": 46,
+              "throttleRate": 0,
+              "sourceIpPrefix": 0,
+              "destinationIpPrefix": 0,
+              "version": 4
+            },
+            {
+              "action": "add",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile",
+              "regType": 4,
+              "value": "1"
+            }
+          ]
+        });
       });
 
     case 'update':
       return jsonResponse(res, {
-        status: 'ok',
-        update: { available: false, current_version: '1.0.0.4', latest_version: '1.0.0.4', link: '', checksum: '', release_notes: '', mandatory: false },
+        "status": "ok",
+        "update": false,
+        "link": "",
+        "checksum": ""
       });
 
     case 'google_auth_get': {
@@ -107,11 +112,11 @@ function handleRequest(req, res) {
     case 'google_auth_post': {
       let body = '';
       req.on('data', c => body += c);
-      return req.on('end', () => jsonResponse(res, { status: 'ok', authenticated: true, token: 'mock-jwt', user: { id: 'mock', email: 'mock@ghast.local', plan: 'premium' } }));
+      return req.on('end', () => jsonResponse(res, { name: 'mock', email: 'mock@ghast.local', pictureURL: '', admin: false, lightning: true, basic: false }));
     }
 
     case 'v8login':
-      return jsonResponse(res, { status: 'ok', authenticated: true, token: 'mock-jwt', user: { id: 'mock', email: 'mock@ghast.local', plan: 'premium' } });
+      return jsonResponse(res, { name: 'mock', email: 'mock@ghast.local', pictureURL: '', admin: false, lightning: true, basic: false });
 
     case 'upgrade':
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -119,10 +124,12 @@ function handleRequest(req, res) {
 
     case 'login_ok':
       return jsonResponse(res, {
-        status: 'ok',
-        authenticated: true,
-        token: 'mock-jwt-full-auth-token',
-        user: { id: 'mock-12345', email: 'mock@ghast.local', username: 'MockUser', plan: 'premium', plan_expires: '2099-12-31T23:59:59Z' },
+        name: 'MockUser',
+        email: 'mock@ghast.local',
+        pictureURL: 'https://ghast.io/avatar.png',
+        admin: false,
+        lightning: true,
+        basic: false
       });
 
     case 'bypass':
